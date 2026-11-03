@@ -1,24 +1,15 @@
 package org.example;
 
-import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
-import net.minecraft.core.HolderLookup;
 import net.minecraft.core.NonNullList;
-import net.minecraft.core.component.DataComponentType;
-import net.minecraft.core.component.DataComponents;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.world.ContainerHelper;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.component.ItemContainerContents;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.ShulkerBoxBlock;
-import net.minecraft.world.level.storage.loot.ContainerComponentManipulator;
-import net.minecraft.world.level.storage.loot.ContainerComponentManipulators;
 import org.joml.Vector2d;
 import org.rusherhack.client.api.events.client.EventUpdate;
 import org.rusherhack.client.api.events.client.input.EventMouse;
@@ -70,15 +61,14 @@ public class ShulkerViewer extends ToggleableModule {
 
 	@Subscribe(priority = -9999, stage = Stage.POST)
 	public void onRender2D(EventRender2D event) {
-		final GuiGraphics context = event.getRenderContext().graphics();
+		final Gfx context = new Gfx(event);
 
 		float screenWidth = mc.getWindow().getGuiScaledWidth() / scale.getValue();
 		float screenHeight = mc.getWindow().getGuiScaledHeight() / scale.getValue();
 
 		int y = (int) ((3 + offset));
 		int totalHeight = 0;
-		context.pose().pushMatrix();
-		context.pose().scale(scale.getValue(), scale.getValue());
+		context.pushScale(scale.getValue());
 
 		for (Shulker shulkerInfo : shulkers) {
 			int startY = y;
@@ -114,13 +104,13 @@ public class ShulkerViewer extends ToggleableModule {
 				}
 
 				if ((x + 22) > 0 && x < screenWidth && (y + 22) > 0 && y < screenHeight) {
-					context.renderItem(stack, x + 2, y);
+					context.item(stack, x + 2, y);
 
 					if (stack.getCount() > 999) {
 						String text = String.format("%.1fk", stack.getCount() / 1000f);
-						context.renderItemDecorations(mc.font, stack, x + 2, y, text);
+						context.itemDecorations(stack, x + 2, y, text);
 					} else {
-						context.renderItemDecorations(mc.font, stack, x + 2, y);
+						context.itemDecorations(stack, x + 2, y, null);
 					}
 				}
 
@@ -129,7 +119,7 @@ public class ShulkerViewer extends ToggleableModule {
 			}
 
 			if (showBlock && (x + 22) > 0 && x < screenWidth && (y + 22) > 0 && y < screenHeight) {
-				context.renderItem(shulkerInfo.getShulker(), x + 2, y + 1);
+				context.item(shulkerInfo.getShulker(), x + 2, y + 1);
 			}
 
 			y = endY;
@@ -149,12 +139,12 @@ public class ShulkerViewer extends ToggleableModule {
 
 		mousePos.set(0);
 		height = y - offset;
-		context.pose().popMatrix();
+		context.popScale();
 	}
 
 	@Subscribe
 	public void mouseScroll(EventMouse.Scroll event) {
-		if (!(mc.screen instanceof AbstractContainerScreen<?>)) return;
+		if (!(Compat.screen(mc) instanceof AbstractContainerScreen<?>)) return;
 
 		if (event.getScrollDeltaY() != 0 && height > mc.getWindow().getGuiScaledHeight()) {
 			this.offset = MathUtils.clamp((int) (offset + Math.ceil(event.getScrollDeltaY()) * 10),
@@ -171,9 +161,9 @@ public class ShulkerViewer extends ToggleableModule {
 	@Subscribe(stage = Stage.PRE)
 	public void mouseClick(EventMouse.Key event){
 		if(event.getButton() == 0 && event.getAction() == 1) {
-			// EventMouse coords are raw window pixels in 1.21.11; convert to GUI-scaled space to match rendering
-			double mouseX = mc.mouseHandler.getScaledXPos(mc.getWindow());
-			double mouseY = mc.mouseHandler.getScaledYPos(mc.getWindow());
+			// EventMouse coords may be raw window pixels; convert to GUI-scaled space to match rendering
+			double mouseX = Compat.scaledMouseX(mc);
+			double mouseY = Compat.scaledMouseY(mc);
 			if (mouseX < 200) {
 				mousePos.set(mouseX, mouseY);
 			}
@@ -185,7 +175,7 @@ public class ShulkerViewer extends ToggleableModule {
 	@Subscribe
 	public void onTick(EventUpdate event) {
 		shulkers.clear();
-		if(!(mc.screen instanceof AbstractContainerScreen<?> screen)) return;
+		if(!(Compat.screen(mc) instanceof AbstractContainerScreen<?> screen)) return;
 
 		for(Slot slot : screen.getMenu().slots){
 			Shulker shulker = Shulker.create(slot.getItem(), slot.index);
@@ -231,13 +221,12 @@ public class ShulkerViewer extends ToggleableModule {
 			}
 
 			NonNullList<ItemStack> items = NonNullList.withSize(27, ItemStack.EMPTY);
-			ItemContainerContents component = stack.getComponents().get(DataComponents.CONTAINER);
+			List<ItemStack> list = Compat.containerItems(stack);
 
 			boolean compact = ShulkerViewerPlugin.shulkerViewer.compact.getValue();
 
-			if (component != null) {
+			if (list != null) {
 				Item unstackable = null;
-				List<ItemStack> list = component.stream().toList();
 
 				for (int i = 0; i < list.size(); i++) {
 					ItemStack item = list.get(i);
@@ -285,7 +274,7 @@ public class ShulkerViewer extends ToggleableModule {
 			if (block instanceof ShulkerBoxBlock shulkerBlock) {
 				DyeColor dye = shulkerBlock.getColor();
 				if (dye == null) return backgroundColor.getValue();
-				int colorComponents = dye.getTextureDiffuseColor();
+				int colorComponents = Compat.dyeColor(dye);
 				int alpha = 150;
 
 				Color baseColor = new Color(colorComponents);
