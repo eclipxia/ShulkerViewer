@@ -7,15 +7,17 @@ One project per supported Minecraft version (1.21.4, 1.21.11, 26.2). Shared code
 
 ```
 ./gradlew buildAll              # all versions, jars end up in build/libs
-./gradlew :versions:1.21.11:build
+./gradlew build-1.21.11         # one version
 ```
 
 ## Testing in a dev client
 
+All of these root tasks are in the `Plugin` group, so they show up at the top of gradleTui / `./gradlew tasks`.
+
 Copy `rusherhack-loader.jar` to `lib/` (gitignored), then:
 
 ```
-./gradlew :versions:26.2:runPlugin
+./gradlew run-26.2
 ```
 
 The first launch of a fresh `run/` folder makes RusherHack move the plugin into `rusherhack/legacy/`, so launch twice.

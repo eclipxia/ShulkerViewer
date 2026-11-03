@@ -6,11 +6,34 @@ plugins {
 	id 'net.fabricmc.fabric-loom' version '1.19.3' apply false
 }
 
-//./gradlew buildAll collects every version's jar into build/libs
+//short root-level tasks so tools like gradleTui show something sensible instead of
+//the versions:<mc>:<task> variants (and so a bare "runPlugin" never starts every version)
+def versionProjects = project(':versions').subprojects
+
 tasks.register('buildAll', Copy) {
-	group = 'build'
-	dependsOn subprojects.collect { it.tasks.matching { t -> t.name == 'build' } }
-	from subprojects.collect { it.layout.buildDirectory.dir('libs') }
+	group = 'plugin'
+	description = 'Build every version, jars end up in build/libs'
+	dependsOn versionProjects.collect { "${it.path}:build" }
+	from versionProjects.collect { it.layout.buildDirectory.dir('libs') }
 	exclude '*-sources.jar', '*-dev.jar'
 	into layout.buildDirectory.dir('libs')
+}
+
+tasks.register('cleanAll') {
+	group = 'plugin'
+	description = 'Clean every version project'
+	dependsOn versionProjects.collect { "${it.path}:clean" }
+}
+
+versionProjects.each { p ->
+	tasks.register("build-${p.name}") {
+		group = 'plugin'
+		description = "Build the plugin jar for Minecraft ${p.name}"
+		dependsOn "${p.path}:build"
+	}
+	tasks.register("run-${p.name}") {
+		group = 'plugin'
+		description = "Start a RusherHack dev client on Minecraft ${p.name} with the plugin loaded"
+		dependsOn "${p.path}:runPlugin"
+	}
 }

@@ -91,8 +91,9 @@ jar {
 //the jar rusherhack loads: remapped for obfuscated versions, plain otherwise
 def pluginJar = isObfuscated ? tasks.named("remapJar") : tasks.named("jar")
 
+//no group: the root project exposes run-<mc> / build-<mc> instead
 tasks.register("copyPluginToRunDir", Copy) {
-	group = "build"
+	description = "Copy the built plugin jar into run/rusherhack/plugins"
 	dependsOn pluginJar
 	from pluginJar.flatMap { it.archiveFile }
 	into layout.projectDirectory.dir("run/rusherhack/plugins")
@@ -100,7 +101,7 @@ tasks.register("copyPluginToRunDir", Copy) {
 
 //launches the game with the rusherhack loader (put rusherhack-loader.jar in lib/, it's gitignored)
 tasks.register('runPlugin', JavaExec) {
-	group = "build"
+	description = "Start a RusherHack dev client with the plugin loaded (needs lib/rusherhack-loader.jar)"
 	dependsOn downloadAssets, copyPluginToRunDir
 	classpath.from configurations.productionRuntime
 	mainClass = "net.fabricmc.loader.impl.launch.knot.KnotClient"
