@@ -45,7 +45,7 @@ import static java.awt.Color.RED;
 import static java.awt.Color.WHITE;
 
 public class ShulkerViewer extends ToggleableModule {
-	public Setting<Boolean> dynamicColor = new BooleanSetting("DynamicColor", false);
+	public Setting<Boolean> dynamicColor = new BooleanSetting("DynamicColor", true);
 	public Setting<Color> backgroundColor = new ColorSetting("DefaultColor", new Color(248, 248, 255, 150));
 	public Setting<Boolean> compact = new BooleanSetting("Compact", false);
 	public Setting<Float> scale = new NumberSetting<>("Scale", 1.0f, 0.5f, 1.5f);
@@ -77,13 +77,32 @@ public class ShulkerViewer extends ToggleableModule {
 
 		int y = (int) ((3 + offset));
 		int totalHeight = 0;
-		context.pose().pushPose();
-		context.pose().scale(scale.getValue(), scale.getValue(), scale.getValue());
+		context.pose().pushMatrix();
+		context.pose().scale(scale.getValue(), scale.getValue());
 
 		for (Shulker shulkerInfo : shulkers) {
-			int count = 0, x = 2, startY = y, maxX = 22;
+			int startY = y;
 			List<ItemStack> stacks = shulkerInfo.getStacks();
 
+			//precompute panel bounds so the background can be drawn behind the items
+			int cells = 0;
+			for (ItemStack stack : stacks) {
+				if (shulkerInfo.isCompact() && stack.isEmpty()) break;
+				cells++;
+			}
+			boolean showBlock = cells == 0 && shulkerInfo.isCompact();
+			int rows = Math.max(1, (int) Math.ceil(cells / 9.0));
+			int maxX = Math.max(22, 2 + Math.min(cells, 9) * 20);
+			int endY = startY + rows * 18;
+
+			//background (behind items), colored to match the shulker
+			if ((startY + 22) > 0 && startY < screenHeight) {
+				int color = dynamicColor.getValue() ? getShulkerColor(shulkerInfo.getShulker()).getRGB() : backgroundColor.getValue().getRGB();
+				context.fill(2, startY, maxX, endY, color);
+			}
+
+			//items / block (foreground)
+			int count = 0, x = 2;
 			for (ItemStack stack : stacks) {
 				if (shulkerInfo.isCompact() && stack.isEmpty()) {
 					break;
@@ -107,25 +126,17 @@ public class ShulkerViewer extends ToggleableModule {
 
 				x += 20;
 				count++;
-				maxX = Math.max(maxX, x);
 			}
 
-			if (count == 0 && shulkerInfo.isCompact()) {
-				if ((x + 22) > 0 && x < screenWidth && (y + 22) > 0 && y < screenHeight) {
-					context.renderItem(shulkerInfo.getShulker(), x + 2, y + 1);
-				}
+			if (showBlock && (x + 22) > 0 && x < screenWidth && (y + 22) > 0 && y < screenHeight) {
+				context.renderItem(shulkerInfo.getShulker(), x + 2, y + 1);
 			}
 
-			y += (int) (18);
+			y = endY;
 
 			if (isClickedWithinBounds(mousePos, maxX * scale.getValue(), startY * scale.getValue(), y * scale.getValue())) {
 				InventoryUtils.clickSlot(shulkerInfo.getSlot(), false);
 				mousePos.set(0);
-			}
-
-			if ((startY + 22)  > 0 && startY < screenHeight) {
-				int color = dynamicColor.getValue() ? getShulkerColor(shulkerInfo.getShulker()).getRGB() : backgroundColor.getValue().getRGB();
-				context.fill(2, startY, maxX, y, color);
 			}
 
 			y += 3;
@@ -138,7 +149,7 @@ public class ShulkerViewer extends ToggleableModule {
 
 		mousePos.set(0);
 		height = y - offset;
-		context.pose().popPose();
+		context.pose().popMatrix();
 	}
 
 	@Subscribe
@@ -159,9 +170,13 @@ public class ShulkerViewer extends ToggleableModule {
 
 	@Subscribe(stage = Stage.PRE)
 	public void mouseClick(EventMouse.Key event){
-		if(event.getButton() == 0 && event.getAction() == 1 && event.getMouseX() < 200) {
-			mousePos.set(event.getMouseX(), event.getMouseY());
-			//System.out.println("CLICKED AT X:" + mousePos.x + ", Y:" + mousePos.y);
+		if(event.getButton() == 0 && event.getAction() == 1) {
+			// EventMouse coords are raw window pixels in 1.21.11; convert to GUI-scaled space to match rendering
+			double mouseX = mc.mouseHandler.getScaledXPos(mc.getWindow());
+			double mouseY = mc.mouseHandler.getScaledYPos(mc.getWindow());
+			if (mouseX < 200) {
+				mousePos.set(mouseX, mouseY);
+			}
 		}
 	}
 
@@ -271,7 +286,7 @@ public class ShulkerViewer extends ToggleableModule {
 				DyeColor dye = shulkerBlock.getColor();
 				if (dye == null) return backgroundColor.getValue();
 				int colorComponents = dye.getTextureDiffuseColor();
-				int alpha = 50;
+				int alpha = 150;
 
 				Color baseColor = new Color(colorComponents);
 

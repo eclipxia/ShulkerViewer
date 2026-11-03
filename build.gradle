@@ -1,5 +1,5 @@
 plugins {
-	id 'fabric-loom' version '1.2-SNAPSHOT'
+	id 'fabric-loom' version '1.17-SNAPSHOT'
 	id 'maven-publish'
 }
 
@@ -8,6 +8,11 @@ group = project.maven_group
 
 configurations {
 	rusherhackApi
+	productionRuntime {
+		extendsFrom configurations.minecraftLibraries
+		extendsFrom configurations.loaderLibraries
+		extendsFrom configurations.minecraftRuntimeLibraries
+	}
 	rusherhackApi.canBeResolved(true)
 	compileOnly.extendsFrom(rusherhackApi)
 }
@@ -35,14 +40,14 @@ repositories {
 dependencies {
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
 	
-	//mojmap + parchment mappings
-	mappings loom.layered() {
-		officialMojangMappings()
-		parchment("org.parchmentmc.data:parchment-1.20.1:2023.07.30@zip")
-	}
-	
+	//mojmap mappings (parchment dropped: no release for 1.21.11, dev-only param names)
+	mappings loom.officialMojangMappings()
+
 	//rusherhack api
-	rusherhackApi "org.rusherhack:rusherhack-api:1.21-SNAPSHOT"
+	rusherhackApi "org.rusherhack:rusherhack-api:${project.minecraft_version}-SNAPSHOT"
+
+	productionRuntime(modImplementation("net.fabricmc:fabric-loader:0.17.2"))
+	productionRuntime("net.fabricmc:intermediary:${project.minecraft_version}")
 }
 
 loom {
@@ -54,13 +59,49 @@ loom {
 		}
 	}
 	
-	//disable run configs
 	runConfigs.configureEach {
 		ideConfigGenerated = false
 	}
 }
 
-def targetJavaVersion = 17
+//launches the game with the rusherhack loader (put rusherhack-loader.jar in lib/, it's gitignored)
+tasks.register('runPlugin', JavaExec) {
+	group = "build"
+	dependsOn remapJar, downloadAssets, copyPluginToRunDir
+	classpath.from configurations.productionRuntime
+	mainClass = "net.fabricmc.loader.impl.launch.knot.KnotClient"
+	workingDir = file("run")
+
+	doFirst {
+		classpath.from loom.minecraftProvider.minecraftClientJar
+		workingDir.mkdirs()
+
+		args(
+				"--assetIndex", loom.minecraftProvider.versionInfo.assetIndex().fabricId(loom.minecraftProvider.minecraftVersion()),
+				"--assetsDir", new File(loom.files.userCache, "assets").absolutePath,
+				"--gameDir", workingDir.absolutePath
+		)
+
+		def loaderJar = layout.projectDirectory.file("lib/rusherhack-loader.jar").asFile
+		if (!loaderJar.exists()) {
+			throw new GradleException("rusherhack-loader.jar must be copied to the lib directory!")
+		}
+
+		jvmArgs(
+				"-Drusherhack.enablePlugins=true",
+				"-Dfabric.addMods=${loaderJar.absolutePath}",
+		)
+	}
+}
+
+tasks.register("copyPluginToRunDir", Copy) {
+	group = "build"
+	dependsOn remapJar
+	from remapJar.outputs
+	into file("run/rusherhack/plugins")
+}
+
+def targetJavaVersion = 21
 tasks.withType(JavaCompile).configureEach {
 	// ensure that the encoding is set to UTF-8, no matter what the system default is
 	// this fixes some edge cases with special characters not displaying correctly
@@ -77,7 +118,10 @@ java {
 	if (JavaVersion.current() < javaVersion) {
 		toolchain.languageVersion = JavaLanguageVersion.of(targetJavaVersion)
 	}
-	archivesBaseName = project.archives_base_name
+}
+
+base {
+	archivesName = project.archives_base_name
 }
 
 processResources {
